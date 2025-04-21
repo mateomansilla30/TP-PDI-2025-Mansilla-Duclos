@@ -50,7 +50,6 @@ Ejecutar el siguiente comando:
 
 ```bash
 python problema_1.py
-Este script procesará la imagen, revelará los detalles escondidos y generará las imágenes de salida en la carpeta output_images.
 ```
 
 ### Problema 2

@@ -18,7 +18,7 @@ pip install opencv-python numpy matplotlib
 ```
 
 El proyecto debe tener la siguiente estructura de directorios:
-
+```bash
 TP-PDI-2025-Mansilla-Duclos/
 ├── problema_1/
 │   ├── imagen_con_detalles.jpg     # Imagen con los detalles escondidos (para Problema 1)
@@ -32,7 +32,7 @@ TP-PDI-2025-Mansilla-Duclos/
    │   ├── examen_4.png
    │   └── examen_5.png
    └problema_2.py  
-
+```
 
 ### Problema 1
 Para el Problema 1, la imagen con los detalles escondidos debe estar ubicada en la carpeta problema_1 junto con el archivo problema_1.py. Asegurarse de que la imagen esté correctamente nombrada y sea la correcta para su procesamiento.

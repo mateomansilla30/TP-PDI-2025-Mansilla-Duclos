@@ -103,8 +103,8 @@ def corregir_examen(image_paths):
         # Imprimir los resultados de cada examen
         print("\nRESPUESTAS DETECTADAS:\n")
         for d in detalles_preguntas:
-            print(f"Pregunta {d['pregunta']}: {d['estado']}")
-
+            print(f"Pregunta {d['pregunta']}:{d['respuesta_detectada']}: {d['estado']}")   
+            
         resultados[image_path] = {
             "respuestas": respuestas_finales,
             "correctas": correctas,
@@ -141,12 +141,12 @@ def validar_campos(image_paths):
         # Encontrar y procesar contornos verticales
         v_contours, _ = cv2.findContours(vertical, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         v_lines = [cv2.boundingRect(c)[0] for c in v_contours if cv2.boundingRect(c)[2] < 10]
-        v_lines = sorted(set(v_lines + [0, x2 - x1]))
+        v_lines = sorted(set(v_lines + [0, x2 - x1]))  # Añadir el borde derecho
 
         # Encontrar y procesar contornos horizontales
         h_contours, _ = cv2.findContours(horizontal, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         h_lines = [cv2.boundingRect(c)[1] for c in h_contours if cv2.boundingRect(c)[3] < 10]
-        h_lines = sorted(set(h_lines + [0, y2 - y1]))
+        h_lines = sorted(set(h_lines + [0, y2 - y1]))  # Añadir el borde inferior
 
         # Dibujar celdas y guardar coordenadas
         output = img.copy()
@@ -168,7 +168,8 @@ def validar_campos(image_paths):
                     "y_end": y_end
                 })
 
-                cv2.rectangle(output, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
+                # Borde de 1 píxel
+                cv2.rectangle(output, (x_start, y_start), (x_end, y_end), (0, 255, 0), 1)
                 cv2.putText(output, f"Box{box_id}", (x_start + 2, y_start - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
                 box_id += 1
 
@@ -182,18 +183,35 @@ def validar_campos(image_paths):
             y1, y2 = box["y_start"], box["y_end"]
 
             box_roi = gray[y1:y2, x1:x2]
-            _, box_bin = cv2.threshold(box_roi, 200, 255, cv2.THRESH_BINARY_INV)
+            _, box_bin = cv2.threshold(box_roi, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
             contours, _ = cv2.findContours(box_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+            # Ordenar los contornos por la coordenada X (esto asegura que los caracteres se procesen de izquierda a derecha)
+            contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
+
             character_count = 0
+            previous_x = None  # Inicializar variable para las coordenadas X
+            previous_x_right = None  # Inicializar variable para la X derecha del carácter anterior
+            word_count = 0  # Comenzamos con 1 palabra
+
             for c in contours:
                 x, y, w, h = cv2.boundingRect(c)
-                if (w <= 30 and h <= 40 and w > 2 and h > 5) or (w > 1 and h < 5):
+                if (w <= 30 and h <= 40 and w > 2 and h > 5) or (w > 2 and h < 5) or (w <= 2.5 and h > 5):
                     character_count += 1
-                    cv2.rectangle(output, (x + x1, y + y1), (x + x1 + w, y + y1 + h), (0, 0, 255), 2)
+                    if character_count == 1:
+                        word_count += 1
+                    cv2.rectangle(output, (x + x1, y + y1), (x + x1 + w, y + y1 + h), (0, 0, 255), )
 
-            boxes_data[box['id']] = character_count
+                    if previous_x_right is not None and (x - previous_x_right) < 12:
+                        word_count += 1
+
+                    previous_x_right = x + w  # Actualizar la coordenada X derecha del carácter actual
+
+            boxes_data[box['id']] = {
+                "character_count": character_count,
+                "word_count": word_count
+            }
 
             # Guardar imagen del nombre (box 2)
             if box_index == 2:
@@ -202,18 +220,28 @@ def validar_campos(image_paths):
                 filename = f"box_2_{os.path.basename(image_path)}"
                 cv2.imwrite(os.path.join('output_images', filename), nombre_img)
 
-        # Validaciones
-        name_valid = "OK" if boxes_data.get(2, 0) <= 25 else "MAL"
-        id_valid = "OK" if boxes_data.get(4, 0) == 8 else "MAL"
-        code_valid = "OK" if boxes_data.get(6, 0) == 1 else "MAL"
-        date_valid = "OK" if boxes_data.get(8, 0) == 8 else "MAL"
+        # a. Name: Debe contener al menos dos palabras y no más de 25 caracteres en total.
+        name_valid = "OK" if boxes_data.get(2, {}).get('word_count', 0) >= 2 and boxes_data.get(2, {}).get('character_count', 0) <= 25 else "MAL"
+        # b. ID: Debe contener sólo 8 caracteres en total.
+        id_valid = "OK" if boxes_data.get(4, {}).get('character_count', 0) == 8  else "MAL"
+        # c. Code: Debe contener un único carácter.
+        code_valid = "OK" if boxes_data.get(6, {}).get('character_count', 0) == 1 and boxes_data.get(6, {}).get('word_count', 0) == 1 else "MAL"
+        # d. Date: Debe contener sólo 8 caracteres en total.
+        date_valid = "OK" if boxes_data.get(8, {}).get('character_count', 0) == 8  else "MAL"
 
         results[image_path] = {
             "Name": name_valid,
             "ID": id_valid,
             "Code": code_valid,
-            "Date": date_valid
+            "Date": date_valid,
+            "Words": boxes_data.get(2, {}).get('word_count', 0),  
+            "Characters": boxes_data.get(2, {}).get('character_count', 0)  
         }
+
+        # Mostrar la imagen final con los rectángulos
+        plt.imshow(cv2.cvtColor(output, cv2.COLOR_BGR2RGB))
+        plt.axis('off')  # Desactivar los ejes
+        plt.show()
 
     return results
 
